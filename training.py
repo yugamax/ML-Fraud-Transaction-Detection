@@ -1,29 +1,30 @@
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
-from xgboost import XGBClassifier
+from fastapi import FastAPI
+from pydantic import BaseModel
 import joblib
-import warnings
+import numpy as np
+import os
 
-warnings.filterwarnings("ignore")
+app = FastAPI(title="Fraud Detection API")
 
-df = pd.read_csv(r"dataset\transaction_recs.csv")
+# Load model once at startup
+model_path = os.path.join("model", "xgb_model.joblib")
+model = joblib.load(model_path)
 
-x = df.iloc[:,2:20]
-y= df.iloc[:,1]
+# Define request schema
+class TransactionData(BaseModel):
+    features: list[float]  # Must be 18 features
 
-y = y.replace({'Fraud': 1, 'Non - Fraud': 0})
-balancingf = y.value_counts()[0]/y.value_counts()[1]
+@app.post("/predict")
+def predict(data: TransactionData):
+    if len(data.features) != 18:
+        return {"error": "Input must contain exactly 18 features."}
 
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.30, random_state=42, stratify=y)
+    # Convert input into numpy array and reshape for single sample
+    input_data = np.array(data.features).reshape(1, -1)
+    prediction = model.predict(input_data)[0]
+    label = "Fraud" if prediction == 1 else "Non - Fraud"
 
-model = XGBClassifier(scale_pos_weight=balancingf)
-model.fit(x_train, y_train)
-
-y_pred = model.predict(x_test)
-
-print("\t\tClassification Report:\n")
-print(classification_report(y_test, y_pred))
-print(f"\nAccuracy of model : {model.score(x_test, y_test)*100:.2f} %")
-
-joblib.dump(model, r"model/xgb_model.joblib")
+    return {
+        "prediction": int(prediction),
+        "label": label
+    }
