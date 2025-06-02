@@ -1,14 +1,17 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Union
 import numpy as np
-import pandas as pd
 import joblib
-import uvicorn
 import os
 from datetime import datetime
-import asyncio
+from sqlalchemy.orm import Session
+from sqlalchemy import and_
+from db_init import SessionLocal, engine
+from db_handling import Base, Transactions, MildlyUnsafeTransaction
+from fault_reason import reason
+import pandas as pd
 
 app = FastAPI()
 app.add_middleware(
@@ -19,22 +22,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-pack = joblib.load(r"model\models.joblib")
+# Base.metadata.create_all(bind=engine)
+
+pack = joblib.load(os.path.join("backend", "AIML", "model", "models.joblib"))
 model = pack['model']
 enc1 = pack['enc1']
 enc2 = pack['enc2']
-
-df = pd.read_csv(r"dataset\cleaned_dataset.csv")
-df2 = pd.read_csv(r"dataset\mildly_unsafe_transactions.csv")
 
 class Transaction_data(BaseModel):
     acc_holder: str
     features: list[Union[float , str]]
 
-def changes_in_dataset(label, data1):
-    new_row = [len(df)] + [label] + list(data1) + [datetime.now().strftime("%d-%m-%Y %H:%M:%S")]
-    df.loc[len(df)] = new_row
-    df.to_csv(r"dataset\cleaned_dataset.csv", index=False)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def changes_in_dataset(label_int, data, db: Session):
+    transaction = Transactions(
+        FLAG=float(label_int),
+        avg_min_between_sent_tnx=float(data[0]),
+        avg_min_between_received_tnx=float(data[1]),
+        time_diff_mins=float(data[2]),
+        sent_tnx=float(data[3]),
+        received_tnx=float(data[4]),
+        number_of_created_contracts=float(data[5]),
+        max_value_received=float(data[6]),
+        avg_val_received=float(data[7]),
+        avg_val_sent=float(data[8]),
+        total_ether_sent=float(data[9]),
+        total_ether_balance=float(data[10]),
+        erc20_total_ether_received=float(data[11]),
+        erc20_total_ether_sent=float(data[12]),
+        erc20_total_ether_sent_contract=float(data[13]),
+        erc20_uniq_sent_addr=float(data[14]),
+        erc20_uniq_rec_token_name=float(data[15]),
+        erc20_most_sent_token_type=str(data[16]),
+        erc20_most_rec_token_type=str(data[17]),
+        time=datetime.now()
+    )
+    db.add(transaction)
+    db.commit()
+
 
 def encoding(encoder, val):
     try:
@@ -44,63 +75,89 @@ def encoding(encoder, val):
     except ValueError:
         return encoder.transform(['missing'])[0]
 
-@app.api_route("/ping", methods=["GET", "HEAD"])
-async def ping():
-    await asyncio.sleep(0.1)
+@app.get("/ping")
+def ping():
     return {"message": "server is running"}
 
 @app.post("/predict")
-async def predict(data: Transaction_data):
+def predict(data: Transaction_data, db: Session = Depends(get_db)):
     acc_holder = data.acc_holder
-    data1 = data.features
-    data1 = ["missing" if pd.isna(x) else x for x in data1]
-    if len(data1) != 18:
-        print("Missing features. Expected 18 features.")
+    data1 = ["missing" if pd.isna(x) else x for x in data.features]
+    data2 = data1.copy()
+
+    if len(data2) != 18:
         return {"ML error": "Missing features. Expected 18 features."}
 
-    data1[-2] = encoding(enc1, data1[-2])
-    data1[-1] = encoding(enc2, data1[-1])
+    data2[-2] = encoding(enc1, data2[-2])
+    data2[-1] = encoding(enc2, data2[-1])
 
-    input_data = np.array(data1).reshape(1, -1)
+    input_data = np.array(data2).reshape(1, -1)
     prediction = model.predict(input_data)[0]
     confidence = model.predict_proba(input_data)[0][prediction]
 
+    filters = [
+        Transactions.FLAG == float(prediction),
+        Transactions.avg_min_between_sent_tnx == float(data1[0]),
+        Transactions.avg_min_between_received_tnx == float(data1[1]),
+        Transactions.time_diff_mins == float(data1[2]),
+        Transactions.sent_tnx == float(data1[3]),
+        Transactions.received_tnx == float(data1[4]),
+        Transactions.number_of_created_contracts == float(data1[5]),
+        Transactions.max_value_received == float(data1[6]),
+        Transactions.avg_val_received == float(data1[7]),
+        Transactions.avg_val_sent == float(data1[8]),
+        Transactions.total_ether_sent == float(data1[9]),
+        Transactions.total_ether_balance == float(data1[10]),
+        Transactions.erc20_total_ether_received == float(data1[11]),
+        Transactions.erc20_total_ether_sent == float(data1[12]),
+        Transactions.erc20_total_ether_sent_contract == float(data1[13]),
+        Transactions.erc20_uniq_sent_addr == float(data1[14]),
+        Transactions.erc20_uniq_rec_token_name == float(data1[15]),
+        Transactions.erc20_most_sent_token_type == str(data1[16]),
+        Transactions.erc20_most_rec_token_type == str(data1[17])
+    ]
+
+    row_exists = db.query(Transactions).filter(and_(*filters)).first() is not None
+
     if prediction == 1 and confidence > 0.85:
         label = "Fraud"
-        fr_type = "Unsafe Transaction"
-        row_exists = ((df.iloc[:, 2:20] == data1).all(axis=1)).any()
+        fr_type = reason(str(data1))
         if row_exists:
-            print("Row is present in the dataset so no changes made.")
+            print("Row is present in the database so no changes made.")
         else:
-            print("Row is not present in the dataset so updating the csv file.")
-            changes_in_dataset(prediction, data1)
+            print("Row is not present in the database so updating it.")
+            changes_in_dataset(prediction, data1, db)
 
-    elif confidence > 0.65 and confidence < 0.85:
+    elif 0.65 < confidence < 0.85:
         label = "Non - Fraud"
-        fr_type = "Mildly Unsafe Transaction"
+        fr_type = "Mildly Unsafe Transaction"+ " - " + reason(str(data1))
 
-        if acc_holder in df2["IDs"].values:
+        count = db.query(MildlyUnsafeTransaction).filter(MildlyUnsafeTransaction.acc_holder == acc_holder).count()
+        if count >= 2:
+            db.query(MildlyUnsafeTransaction).filter(MildlyUnsafeTransaction.acc_holder == acc_holder).delete()
+            db.commit()
             label = "Fraud"
-            fr_type = "Unsafe Transaction"
-            df2 = df2[df2["IDs"] != acc_holder]
-            df2.to_csv(r"dataset/mildly_unsafe_transactions.csv", index=False)
-            changes_in_dataset(prediction, data1)
+            fr_type = "Reciever's Account found too many times in Mildly Fraud Transactions records."
+            print("More than 2 suspicious records found, marked as fraud.")
         else:
-            print("Putting the mildly unsafe transaction into monitoring dataset.")
-            new_row2 = [len(df2)] + [acc_holder] + [datetime.now().strftime("%d-%m-%Y %H:%M:%S")]
-            df2.loc[len(df2)] = new_row2
-            df2.to_csv(r"dataset/mildly_unsafe_transactions.csv", index=False)
+            new_entry = MildlyUnsafeTransaction(acc_holder=acc_holder)
+            db.add(new_entry)
+            db.commit()
+            print("Added to mildly unsafe monitoring table.")
+
     else:
         label = "Non - Fraud"
-        fr_type = "Safe Transaction"
-    
+        fr_type = "Safe Transaction. No possible fraud found."
+
     print(f"Confidence: {confidence*100:.2f}%")
 
     return {
         "prediction": label,
-        "Type": fr_type
-        }
+        "Type": fr_type,
+        "confidence": f"{confidence*100:.2f}%"
+    }
 
 if __name__ == "__main__":
+    import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="127.0.0.1", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port)
