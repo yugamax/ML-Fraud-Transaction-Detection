@@ -119,16 +119,17 @@ def predict(data: Transaction_data, db: Session = Depends(get_db)):
 
     row_exists = db.query(Transactions).filter(and_(*filters)).first() is not None
 
-    if prediction == 1 and confidence > 0.85:
+    if prediction == 1 and confidence >= 0.70:
         label = "Fraud"
         fr_type = reason(str(data1))
+
         if row_exists:
             print("Row is present in the database so no changes made.")
         else:
             print("Row is not present in the database so updating it.")
             changes_in_dataset(prediction, data1, db)
 
-    elif 0.60 < confidence < 0.80:
+    elif 0.50 <= confidence < 0.70:
         label = "Non - Fraud"
         fr_type = "Mildly Unsafe Transaction"+ " - " + reason(str(data1))
 
@@ -144,7 +145,6 @@ def predict(data: Transaction_data, db: Session = Depends(get_db)):
             db.add(new_entry)
             db.commit()
             print("Added to mildly unsafe monitoring table.")
-
     else:
         label = "Non - Fraud"
         fr_type = "Safe Transaction. No possible fraud found."
