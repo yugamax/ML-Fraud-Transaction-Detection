@@ -25,19 +25,21 @@ enc1 = pack['enc1']
 enc2 = pack['enc2']
 
 df = pd.read_csv(r"dataset\cleaned_dataset.csv")
-df2 = pd.read_csv(r"dataset/mildly_unsafe_transactions.csv")
+df2 = pd.read_csv(r"dataset\mildly_unsafe_transactions.csv")
 
 class Transaction_data(BaseModel):
     acc_holder: str
     features: list[Union[float , str]]
 
-def changes_in_dataset(label, data):
-    new_row = [len(df)] + [label] + list(data) + [datetime.now().strftime("%d-%m-%Y %H:%M:%S")]
+def changes_in_dataset(label, data1):
+    new_row = [len(df)] + [label] + list(data1) + [datetime.now().strftime("%d-%m-%Y %H:%M:%S")]
     df.loc[len(df)] = new_row
     df.to_csv(r"dataset\cleaned_dataset.csv", index=False)
 
 def encoding(encoder, val):
     try:
+        if pd.isna(val) or val == "":
+            val = "missing"
         return encoder.transform([val])[0]
     except ValueError:
         return encoder.transform(['missing'])[0]
@@ -51,16 +53,15 @@ async def ping():
 async def predict(data: Transaction_data):
     acc_holder = data.acc_holder
     data1 = data.features
-    print(data1)
-    data2=data.features
-    if len(data2) != 18:
+    data1 = ["missing" if pd.isna(x) else x for x in data1]
+    if len(data1) != 18:
         print("Missing features. Expected 18 features.")
         return {"ML error": "Missing features. Expected 18 features."}
 
-    data2[-2] = encoding(enc1, data2[-2])
-    data2[-1] = encoding(enc2, data2[-1])
+    data1[-2] = encoding(enc1, data1[-2])
+    data1[-1] = encoding(enc2, data1[-1])
 
-    input_data = np.array(data2).reshape(1, -1)
+    input_data = np.array(data1).reshape(1, -1)
     prediction = model.predict(input_data)[0]
     confidence = model.predict_proba(input_data)[0][prediction]
 
