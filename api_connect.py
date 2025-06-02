@@ -81,81 +81,85 @@ def ping():
 
 @app.post("/predict")
 def predict(data: Transaction_data, db: Session = Depends(get_db)):
-    acc_holder = data.acc_holder
-    data1 = ["missing" if pd.isna(x) else x for x in data.features]
-    data2 = data1.copy()
+    try:
+        acc_holder = data.acc_holder
+        data1 = ["missing" if pd.isna(x) else x for x in data.features]
+        data2 = data1.copy()
 
-    if len(data2) != 18:
-        return {"ML error": "Missing features. Expected 18 features."}
+        if len(data2) != 18:
+            return {"ML error": "Missing features. Expected 18 features."}
 
-    data2[-2] = encoding(enc1, data2[-2])
-    data2[-1] = encoding(enc2, data2[-1])
+        data2[-2] = encoding(enc1, data2[-2])
+        data2[-1] = encoding(enc2, data2[-1])
 
-    input_data = np.array(data2).reshape(1, -1)
-    prediction = model.predict(input_data)[0]
-    confidence = model.predict_proba(input_data)[0][prediction]
+        input_data = np.array(data2).reshape(1, -1)
+        prediction = model.predict(input_data)[0]
+        confidence = model.predict_proba(input_data)[0][prediction]
 
-    filters = [
-        Transactions.FLAG == float(prediction),
-        Transactions.avg_min_between_sent_tnx == float(data1[0]),
-        Transactions.avg_min_between_received_tnx == float(data1[1]),
-        Transactions.time_diff_mins == float(data1[2]),
-        Transactions.sent_tnx == float(data1[3]),
-        Transactions.received_tnx == float(data1[4]),
-        Transactions.number_of_created_contracts == float(data1[5]),
-        Transactions.max_value_received == float(data1[6]),
-        Transactions.avg_val_received == float(data1[7]),
-        Transactions.avg_val_sent == float(data1[8]),
-        Transactions.total_ether_sent == float(data1[9]),
-        Transactions.total_ether_balance == float(data1[10]),
-        Transactions.erc20_total_ether_received == float(data1[11]),
-        Transactions.erc20_total_ether_sent == float(data1[12]),
-        Transactions.erc20_total_ether_sent_contract == float(data1[13]),
-        Transactions.erc20_uniq_sent_addr == float(data1[14]),
-        Transactions.erc20_uniq_rec_token_name == float(data1[15]),
-        Transactions.erc20_most_sent_token_type == str(data1[16]),
-        Transactions.erc20_most_rec_token_type == str(data1[17])
-    ]
+        filters = [
+            Transactions.FLAG == float(prediction),
+            Transactions.avg_min_between_sent_tnx == float(data1[0]),
+            Transactions.avg_min_between_received_tnx == float(data1[1]),
+            Transactions.time_diff_mins == float(data1[2]),
+            Transactions.sent_tnx == float(data1[3]),
+            Transactions.received_tnx == float(data1[4]),
+            Transactions.number_of_created_contracts == float(data1[5]),
+            Transactions.max_value_received == float(data1[6]),
+            Transactions.avg_val_received == float(data1[7]),
+            Transactions.avg_val_sent == float(data1[8]),
+            Transactions.total_ether_sent == float(data1[9]),
+            Transactions.total_ether_balance == float(data1[10]),
+            Transactions.erc20_total_ether_received == float(data1[11]),
+            Transactions.erc20_total_ether_sent == float(data1[12]),
+            Transactions.erc20_total_ether_sent_contract == float(data1[13]),
+            Transactions.erc20_uniq_sent_addr == float(data1[14]),
+            Transactions.erc20_uniq_rec_token_name == float(data1[15]),
+            Transactions.erc20_most_sent_token_type == str(data1[16]),
+            Transactions.erc20_most_rec_token_type == str(data1[17])
+        ]
 
-    row_exists = db.query(Transactions).filter(and_(*filters)).first() is not None
+        row_exists = db.query(Transactions).filter(and_(*filters)).first() is not None
 
-    if prediction == 1 and confidence >= 0.70:
-        label = "Fraud"
-        fr_type = reason(str(data1))
-
-        if row_exists:
-            print("Row is present in the database so no changes made.")
-        else:
-            print("Row is not present in the database so updating it.")
-            changes_in_dataset(prediction, data1, db)
-
-    elif 0.50 <= confidence < 0.70:
-        label = "Non - Fraud"
-        fr_type = "Mildly Unsafe Transaction"+ " - " + reason(str(data1))
-
-        count = db.query(MildlyUnsafeTransaction).filter(MildlyUnsafeTransaction.acc_holder == acc_holder).count()
-        if count >= 2:
-            db.query(MildlyUnsafeTransaction).filter(MildlyUnsafeTransaction.acc_holder == acc_holder).delete()
-            db.commit()
+        if prediction == 1 and confidence >= 0.70:
             label = "Fraud"
-            fr_type = "Reciever's Account found too many times in Mildly Fraud Transactions records."
-            print("More than 2 suspicious records found, marked as fraud.")
+            fr_type = reason(str(data1))
+
+            if row_exists:
+                print("Row is present in the database so no changes made.")
+            else:
+                print("Row is not present in the database so updating it.")
+                changes_in_dataset(prediction, data1, db)
+
+        elif 0.50 <= confidence < 0.70:
+            label = "Non - Fraud"
+            fr_type = "Mildly Unsafe Transaction"+ " - " + reason(str(data1))
+
+            count = db.query(MildlyUnsafeTransaction).filter(MildlyUnsafeTransaction.acc_holder == acc_holder).count()
+            if count >= 2:
+                db.query(MildlyUnsafeTransaction).filter(MildlyUnsafeTransaction.acc_holder == acc_holder).delete()
+                db.commit()
+                label = "Fraud"
+                fr_type = "Reciever's Account found too many times in Mildly Fraud Transactions records."
+                print("More than 2 suspicious records found, marked as fraud.")
+            else:
+                new_entry = MildlyUnsafeTransaction(acc_holder=acc_holder)
+                db.add(new_entry)
+                db.commit()
+                print("Added to mildly unsafe monitoring table.")
+
         else:
-            new_entry = MildlyUnsafeTransaction(acc_holder=acc_holder)
-            db.add(new_entry)
-            db.commit()
-            print("Added to mildly unsafe monitoring table.")
-    else:
-        label = "Non - Fraud"
-        fr_type = "Safe Transaction. No possible fraud found."
+            label = "Non - Fraud"
+            fr_type = "Safe Transaction. No possible fraud found."
 
-    print(f"Confidence: {confidence*100:.2f}%")
+        return {
+            "prediction": label,
+            "Type": fr_type,
+            "confidence": f"{confidence*100:.2f}%"
+        }
+    except Exception as e:
+        print(f"Error occurred: {e}")
+        return {"error": "An error occurred while processing the request."}
 
-    return {
-        "prediction": label,
-        "Type": fr_type,
-        "confidence": f"{confidence*100:.2f}%"
-    }
 
 if __name__ == "__main__":
     import uvicorn
