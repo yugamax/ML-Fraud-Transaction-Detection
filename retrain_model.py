@@ -13,7 +13,7 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
-model_dir = os.path.join("backend", "AIML", "model")
+model_dir = os.path.join("model")
 os.makedirs(model_dir, exist_ok=True)
 
 session = SessionLocal()
