@@ -40,7 +40,8 @@ y_pred = model.predict(x_test)
 print("\t\tClassification Report:\n")
 print(classification_report(y_test, y_pred))
 print(f"\nAccuracy of model : {model.score(x_test, y_test)*100:.2f} %")
-
+y_pred_proba = model.predict_proba(x_test)[:, 1]
+print(f"AUC Score: {roc_auc_score(y_test, y_pred_proba):.4f}")
 pack = {
     'model': model,
     'enc1': enc1,
