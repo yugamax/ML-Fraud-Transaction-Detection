@@ -2,41 +2,35 @@ name: Retrain ML Model
 
 on:
   schedule:
-    - cron: '0 0 * * 1,4'  # Every Monday and Thursday at 00:00 UTC
-  workflow_dispatch:        # Manual trigger option
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   retrain:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    env:
+      DB_URL: ${{ secrets.DB_URL }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Install, Retrain, and Commit
         run: |
+          cd backend/AIML
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Run retraining script
-        run: |
           python retrain_model.py
 
-      - name: Commit updated model and dataset
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add model/ dataset/cleaned_dataset.csv
-          git commit -m "auto-retrained model" || echo "No changes to commit"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add model/
+          git commit -m "Update trained model" || echo "No changes to commit"
           git push
-
-      - name: Trigger redeploy on Render
-        env:
-          DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK }}
-        run: |
-          curl -X POST "$DEPLOY_HOOK_URL"
