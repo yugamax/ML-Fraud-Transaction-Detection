@@ -24,7 +24,6 @@ jobs:
 
       - name: Install, Retrain, and Commit
         run: |
-          cd backend/AIML
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           python retrain_model.py
