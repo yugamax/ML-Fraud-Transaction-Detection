@@ -128,7 +128,7 @@ def predict(data: Transaction_data, db: Session = Depends(get_db)):
             print("Row is not present in the database so updating it.")
             changes_in_dataset(prediction, data1, db)
 
-    elif 0.65 < confidence < 0.85:
+    elif 0.60 < confidence < 0.80:
         label = "Non - Fraud"
         fr_type = "Mildly Unsafe Transaction"+ " - " + reason(str(data1))
 
