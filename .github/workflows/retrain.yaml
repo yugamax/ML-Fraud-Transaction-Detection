@@ -2,8 +2,8 @@ name: Retrain ML Model
 
 on:
   schedule:
-    - cron: '0 0 * * 1,4'  # At 00:00 every Monday and Thursday
-  workflow_dispatch:       # Manual trigger option
+    - cron: '0 0 * * 1,4'  # Every Monday and Thursday at 00:00 UTC
+  workflow_dispatch:        # Manual trigger option
 
 jobs:
   retrain:
@@ -27,10 +27,16 @@ jobs:
         run: |
           python retrain_model.py
 
-      - name: Commit updated model
+      - name: Commit updated model and dataset
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add model/ dataset/cleaned_dataset.csv
-          git commit -m "🔁 Auto-retrained model" || echo "No changes to commit"
+          git commit -m "auto-retrained model" || echo "No changes to commit"
           git push
+
+      - name: Trigger redeploy on Render
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          curl -X POST "$DEPLOY_HOOK_URL"
