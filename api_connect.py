@@ -135,7 +135,7 @@ def predict(data: Transaction_data, db: Session = Depends(get_db)):
             fr_type = "Mildly Unsafe Transaction"+ " - " + reason(str(data1))
 
             count = db.query(MildlyUnsafeTransaction).filter(MildlyUnsafeTransaction.acc_holder == acc_holder).count()
-            if count >= 2:
+            if count > 2:
                 db.query(MildlyUnsafeTransaction).filter(MildlyUnsafeTransaction.acc_holder == acc_holder).delete()
                 db.commit()
                 label = "Fraud"
