@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sqlalchemy.orm import Session
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import classification_report
 from xgboost import XGBClassifier
 import os
@@ -36,6 +36,9 @@ df['ERC20_most_rec_token_type'] = enc2.fit_transform(df['ERC20_most_rec_token_ty
 
 x = df.iloc[:, 2:20]
 y = df.iloc[:, 1]
+
+sc = StandardScaler()
+x = sc.fit_transform(x)
 
 balancingf = y.value_counts()[0] / y.value_counts()[1]
 
