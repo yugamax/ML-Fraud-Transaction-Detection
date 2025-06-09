@@ -28,6 +28,7 @@ pack = joblib.load(os.path.join("model", "models.joblib"))
 model = pack['model']
 enc1 = pack['enc1']
 enc2 = pack['enc2']
+sc = pack['scaler']
 
 class Transaction_data(BaseModel):
     acc_holder: str
@@ -93,6 +94,7 @@ def predict(data: Transaction_data, db: Session = Depends(get_db)):
         data2[-1] = encoding(enc2, data2[-1])
 
         input_data = np.array(data2).reshape(1, -1)
+        input_data = sc.transform(input_data)
         prediction = model.predict(input_data)[0]
         confidence = model.predict_proba(input_data)[0][prediction]
 

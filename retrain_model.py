@@ -52,5 +52,5 @@ print("\t\tClassification Report:\n")
 print(classification_report(y_test, y_pred))
 print(f"\nAccuracy of model : {model.score(x_test, y_test)*100:.2f} %")
 
-pack = {'model': model, 'enc1': enc1, 'enc2': enc2}
+pack = {'model': model, 'enc1': enc1, 'enc2': enc2 , 'scaler': sc}
 joblib.dump(pack, os.path.join(model_dir, "models.joblib"))
