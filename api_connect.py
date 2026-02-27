@@ -8,8 +8,8 @@ import os
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
-from db_init import SessionLocal
-from db_handling import Transactions, MildlyUnsafeTransaction
+from db_init import SessionLocal, engine
+from db_handling import Base, Transactions, MildlyUnsafeTransaction
 from fault_reason import reason
 import pandas as pd
 
@@ -18,6 +18,11 @@ import pandas as pd
 # --------------------------------------------------
 
 app = FastAPI()
+
+# Create tables safely on startup
+@app.on_event("startup")
+def create_tables():
+    Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
     CORSMiddleware,
@@ -114,25 +119,24 @@ def ping():
 @app.post("/predict")
 def predict(data: TransactionData, db: Session = Depends(get_db)):
 
-    # Validate feature length
     if len(data.features) != 18:
         return {"error": "Expected exactly 18 features"}
 
     acc_holder = data.acc_holder
 
-    # Replace NaN with "missing"
+    # Replace NaN
     raw_features = ["missing" if pd.isna(x) else x for x in data.features]
     model_features = raw_features.copy()
 
-    # Encode last two categorical features
+    # Encode categorical
     model_features[-2] = encode_value(enc1, model_features[-2])
     model_features[-1] = encode_value(enc2, model_features[-1])
 
-    # Convert numeric model inputs safely
+    # Convert numeric features to float
     for i in range(16):
         model_features[i] = float(model_features[i])
 
-    # Model prediction
+    # Predict
     input_array = np.array(model_features).reshape(1, -1)
     prediction = float(model.predict(input_array)[0])
     confidence = float(model.predict_proba(input_array)[0][int(prediction)])
@@ -192,7 +196,7 @@ def predict(data: TransactionData, db: Session = Depends(get_db)):
             db.commit()
 
             label = "Fraud"
-            fr_type = "Receiver account flagged repeatedly in monitoring records."
+            fr_type = "Receiver account flagged repeatedly."
         else:
             db.add(MildlyUnsafeTransaction(acc_holder=acc_holder))
             db.commit()
@@ -208,7 +212,7 @@ def predict(data: TransactionData, db: Session = Depends(get_db)):
     }
 
 # --------------------------------------------------
-# RUN SERVER
+# RUN
 # --------------------------------------------------
 
 if __name__ == "__main__":
