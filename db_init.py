@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-db_url = os.getenv("db_url")
+db_url = os.getenv("DB_URL")
 
 if not db_url:
 	raise ValueError("db_url environment variable is not set")
