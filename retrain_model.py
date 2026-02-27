@@ -35,7 +35,8 @@ print(f"✅ Loaded dataset with shape: {df.shape}")
 # 2️⃣ Clean & Normalize Data
 # -----------------------------
 # Normalize column names (strip accidental spaces)
-df.columns = df.columns.str.strip()
+# Normalize column names: lower + replace non-alnum with underscore
+df.columns = [re.sub(r"[^0-9a-z]", "_", c.lower()).strip("_") for c in df.columns]
 # Replace empty strings with NaN
 df = df.replace(r'^\s*$', np.nan, regex=True)
 
@@ -72,8 +73,9 @@ rec_candidates = [
     "ERC20 most rec token type",
 ]
 
-sent_col = find_column(sent_candidates, df.columns)
-rec_col = find_column(rec_candidates, df.columns)
+# After normalization, find canonical column names
+sent_col = find_column(["erc20_most_sent_token_type", "erc20_most_sent_token_type"], df.columns)
+rec_col = find_column(["erc20_most_rec_token_type", "erc20_most_rec_token_type"], df.columns)
 
 # Coerce all remaining non-categorical, non-id/flag columns to numeric
 excluded = {"id", "flag"}
@@ -137,11 +139,15 @@ X = df.drop(columns=["id", "flag"], errors="ignore")
 # Ensure there are no object dtype columns left (XGBoost requires numeric or category with enable_categorical)
 obj_cols = X.select_dtypes(include=[object]).columns.tolist()
 if obj_cols:
-    # convert remaining object columns to category codes
     for c in obj_cols:
         X[c] = X[c].astype(str).fillna("missing")
         X[c] = LabelEncoder().fit_transform(X[c])
     print(f"Converted object columns to numeric codes: {obj_cols}")
+
+# Final dtype check before training
+bad_cols = [f"{col}:{dtype.name}" for col, dtype in X.dtypes.items() if dtype.name not in ("int64", "float64", "bool", "category")]
+if bad_cols:
+    raise ValueError(f"DataFrame contains invalid dtypes for XGBoost: {bad_cols}")
 
 if len(y.value_counts()) < 2:
     raise ValueError("❌ Only one class present in target. Cannot train classifier.")
