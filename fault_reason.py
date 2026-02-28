@@ -48,7 +48,7 @@ Output format STRICTLY:
 
 If suspicious:
 
-⚠️ Why this address is dangerous:
+Why this address is dangerous:
 - Reason 1
 - Reason 2
 - Reason 3
