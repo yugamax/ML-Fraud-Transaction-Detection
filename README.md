@@ -5,7 +5,7 @@ Minimal README for running and developing the AIML FastAPI service.
 **Project layout**
 - `api_connect.py` - FastAPI application exposing `/ping` and `/predict` endpoints
 - `retrain_model.py` - retrain script that reads from DB and writes `model/models.joblib`
-- `model/models.joblib` - trained model package (contains `model`, `enc1`, `enc2`)
+- `model/models.joblib` - trained model package (contains `xgb`, `rf`, `enc1`, `enc2`)
 - `db_init.py`, `db_handling.py` - database ORM and session helpers
 - `requirements.txt` - pip dependencies
 - `Dockerfile` - image definition to run the API
@@ -58,7 +58,7 @@ curl -X POST http://127.0.0.1:8000/predict \
 ```
 
 **Retrain model**
-The `retrain_model.py` script reads from the `transactions` table and saves the trained model package to `model/models.joblib` with keys `model`, `enc1`, `enc2` expected by `api_connect.py`.
+The `retrain_model.py` script reads from the `transactions` table and saves the trained model package to `model/models.joblib` with keys `xgb`, `rf`, `enc1`, `enc2` expected by `api_connect.py`.
 
 Run:
 ```bash
@@ -76,7 +76,7 @@ docker run -p 8000:8000 -e DB_URL="postgresql://user:pass@host:5432/db" -v /path
 ```
 
 **Notes & Troubleshooting**
-- Ensure `model/models.joblib` contains `model`, `enc1` and `enc2` keys. If the API raises a model load error, retrain and re-run.
+Ensure `model/models.joblib` contains `xgb`, `rf`, `enc1` and `enc2` keys. If the API raises a model load error, retrain and re-run.
 - Feature ordering must match between training and inference; do not change the input order expected by `api_connect.py`.
 - If XGBoost errors about dtypes, ensure numeric columns are numeric and categorical columns are encoded during retraining.
 

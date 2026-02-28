@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report
 from xgboost import XGBClassifier
+from sklearn.ensemble import RandomForestClassifier
 
 from db_init import SessionLocal
 from db_handling import Transactions
@@ -128,25 +129,40 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 print("🧠 Training model...")
 
-model = XGBClassifier(
+# Train XGBoost
+model_xgb = XGBClassifier(
     scale_pos_weight=scale_pos_weight,
     random_state=42,
     eval_metric="logloss",
 )
 
-model.fit(X_train, y_train)
+model_xgb.fit(X_train, y_train)
+
+# Train Random Forest (class_weight helps with imbalance)
+model_rf = RandomForestClassifier(
+    n_estimators=200,
+    random_state=42,
+    class_weight='balanced'
+)
+
+model_rf.fit(X_train, y_train)
 
 # --------------------------------------------------
 # 9️⃣ EVALUATE MODEL
 # --------------------------------------------------
 
-y_pred = model.predict(X_test)
+# Ensemble: average predicted probabilities from both models
+proba_xgb = model_xgb.predict_proba(X_test)
+proba_rf = model_rf.predict_proba(X_test)
 
-print("\n📊 Classification Report:\n")
+avg_proba = (proba_xgb + proba_rf) / 2.0
+y_pred = (avg_proba[:, 1] >= 0.5).astype(int)
+
+print("\n📊 Classification Report (Ensemble):\n")
 print(classification_report(y_test, y_pred))
 
-accuracy = model.score(X_test, y_test) * 100
-print(f"\n✅ Accuracy: {accuracy:.2f}%")
+accuracy = (y_pred == y_test.values).mean() * 100
+print(f"\n✅ Ensemble Accuracy: {accuracy:.2f}%")
 
 # --------------------------------------------------
 # 🔟 SAVE MODEL + ENCODERS
@@ -156,7 +172,8 @@ save_path = os.path.join(os.path.dirname(__file__), "model")
 os.makedirs(save_path, exist_ok=True)
 
 model_package = {
-    "model": model,
+    "xgb": model_xgb,
+    "rf": model_rf,
     "enc1": enc1,
     "enc2": enc2,
 }

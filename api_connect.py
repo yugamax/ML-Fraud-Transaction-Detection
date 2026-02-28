@@ -37,9 +37,14 @@ app.add_middleware(
 # --------------------------------------------------
 
 pack = joblib.load(os.path.join("model", "models.joblib"))
-model = pack["model"]
+# New ensemble keys: `xgb` and `rf` (RandomForest). Keep encoders names the same.
+model_xgb = pack.get("xgb")
+model_rf = pack.get("rf")
 enc1 = pack["enc1"]
 enc2 = pack["enc2"]
+
+if model_xgb is None or model_rf is None:
+    raise RuntimeError("Model package must contain 'xgb' and 'rf' keys")
 
 # --------------------------------------------------
 # REQUEST MODEL
@@ -136,10 +141,15 @@ def predict(data: TransactionData, db: Session = Depends(get_db)):
     for i in range(16):
         model_features[i] = float(model_features[i])
 
-    # Predict
+    # Predict using ensemble (average probabilities)
     input_array = np.array(model_features).reshape(1, -1)
-    prediction = float(model.predict(input_array)[0])
-    confidence = float(model.predict_proba(input_array)[0][int(prediction)])
+    proba_xgb = model_xgb.predict_proba(input_array)
+    proba_rf = model_rf.predict_proba(input_array)
+
+    avg_proba = (proba_xgb + proba_rf) / 2.0
+    prediction_idx = int((avg_proba[:, 1] >= 0.5)[0])
+    prediction = float(prediction_idx)
+    confidence = float(avg_proba[0][prediction_idx])
 
     # --------------------------------------------------
     # DUPLICATE CHECK
@@ -218,4 +228,4 @@ def predict(data: TransactionData, db: Session = Depends(get_db)):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="127.0.0.1", port=port)
