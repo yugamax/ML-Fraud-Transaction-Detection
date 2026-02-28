@@ -155,11 +155,11 @@ def predict(data: TransactionData, db: Session = Depends(get_db)):
     except Exception:
         sklearn_version = None
 
-    print("[DEBUG] encoded_features:", model_features)
-    print("[DEBUG] proba_xgb:", proba_xgb.tolist())
-    print("[DEBUG] proba_rf:", proba_rf.tolist())
-    print("[DEBUG] avg_proba:", avg_proba.tolist())
-    print("[DEBUG] sklearn_version:", sklearn_version)
+    # print("[DEBUG] encoded_features:", model_features)
+    # print("[DEBUG] proba_xgb:", proba_xgb.tolist())
+    # print("[DEBUG] proba_rf:", proba_rf.tolist())
+    # print("[DEBUG] avg_proba:", avg_proba.tolist())
+    # print("[DEBUG] sklearn_version:", sklearn_version)
     prediction = 1.0 if confidence >= 0.5 else 0.0
 
     # --------------------------------------------------
@@ -218,7 +218,7 @@ def predict(data: TransactionData, db: Session = Depends(get_db)):
     return {
         "prediction": label,
         "type": fr_type,
-        "confidence": f"{confidence * 100:.2f}%"
+        "confidence": f"{confidence * 100:.2f}%" if label!="Non-Fraud" or confidence >= 0.65 else f"{(1-confidence) * 100:.2f}%"
     }
 
 # --------------------------------------------------
