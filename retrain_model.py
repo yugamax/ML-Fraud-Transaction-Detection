@@ -18,9 +18,6 @@ warnings.filterwarnings("ignore")
 
 print("🔄 Starting model retraining...")
 
-# --------------------------------------------------
-# 1️⃣ LOAD DATA FROM DATABASE
-# --------------------------------------------------
 
 session = SessionLocal()
 df = pd.read_sql(session.query(Transactions).statement, session.bind)
@@ -31,9 +28,6 @@ if df.empty:
 
 print(f"✅ Loaded dataset with shape: {df.shape}")
 
-# --------------------------------------------------
-# 2️⃣ EXACT FEATURE ORDER (MUST MATCH FASTAPI)
-# --------------------------------------------------
 
 feature_columns = [
     "avg_min_between_sent_tnx",
@@ -65,9 +59,6 @@ if missing_cols:
 # Keep only required columns in exact order
 df = df[feature_columns + ["flag"]]
 
-# --------------------------------------------------
-# 3️⃣ HANDLE NUMERIC FEATURES (FIRST 16)
-# --------------------------------------------------
 
 numeric_cols = feature_columns[:16]
 
@@ -76,9 +67,6 @@ for col in numeric_cols:
 
 df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].median())
 
-# --------------------------------------------------
-# 4️⃣ ENCODE CATEGORICAL FEATURES (LAST 2)
-# --------------------------------------------------
 
 cat_col_1 = feature_columns[16]
 cat_col_2 = feature_columns[17]
@@ -92,9 +80,7 @@ enc2 = LabelEncoder()
 df[cat_col_1] = enc1.fit_transform(df[cat_col_1])
 df[cat_col_2] = enc2.fit_transform(df[cat_col_2])
 
-# --------------------------------------------------
-# 5️⃣ SPLIT FEATURES & TARGET
-# --------------------------------------------------
+
 
 X = df[feature_columns]
 y = df["flag"].astype(int)
@@ -102,19 +88,14 @@ y = df["flag"].astype(int)
 if y.nunique() < 2:
     raise ValueError("❌ Only one class present. Cannot train classifier.")
 
-# --------------------------------------------------
-# 6️⃣ HANDLE CLASS IMBALANCE
-# --------------------------------------------------
+
 
 class_counts = y.value_counts()
 neg = class_counts.get(0, 0)
 pos = class_counts.get(1, 0)
-
+print(neg, pos)
 scale_pos_weight = neg / pos if pos > 0 else 1
-
-# --------------------------------------------------
-# 7️⃣ TRAIN / TEST SPLIT
-# --------------------------------------------------
+print(f"Calculated scale_pos_weight: {scale_pos_weight:.2f}")
 
 X_train, X_test, y_train, y_test = train_test_split(
     X,
@@ -124,14 +105,14 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y,
 )
 
-# --------------------------------------------------
-# 8️⃣ TRAIN MODEL
-# --------------------------------------------------
-
 print("🧠 Training model...")
 
-# Train XGBoost
 model_xgb = XGBClassifier(
+    n_estimators=400,
+    max_depth=6,
+    learning_rate=0.05,
+    subsample=0.8,
+    colsample_bytree=0.8,
     scale_pos_weight=scale_pos_weight,
     random_state=42,
     eval_metric="logloss",
@@ -139,7 +120,6 @@ model_xgb = XGBClassifier(
 
 model_xgb.fit(X_train, y_train)
 
-# Train Random Forest (class_weight helps with imbalance)
 model_rf = RandomForestClassifier(
     n_estimators=200,
     random_state=42,
@@ -164,6 +144,12 @@ print(classification_report(y_test, y_pred))
 
 accuracy = (y_pred == y_test.values).mean() * 100
 print(f"\n✅ Ensemble Accuracy: {accuracy:.2f}%")
+
+print("Mean predicted fraud probability (test):")
+print(avg_proba[:,1].mean())
+
+print("Max predicted fraud probability:")
+print(avg_proba[:,1].max())
 
 # --------------------------------------------------
 # 🔟 SAVE MODEL + ENCODERS
