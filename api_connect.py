@@ -207,7 +207,7 @@ def predict(data: TransactionData, db: Session = Depends(get_db)):
     return {
         "prediction": label,
         "type": fr_type,
-        "confidence": f"{confidence * 100:.2f}%"
+        "confidence": f"{(1-confidence) * 100:.2f}%"
     }
 
 # --------------------------------------------------
