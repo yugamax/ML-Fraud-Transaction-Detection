@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report
 from xgboost import XGBClassifier
+import sklearn
 from sklearn.ensemble import RandomForestClassifier
 
 from db_init import SessionLocal
@@ -176,6 +177,7 @@ model_package = {
     "rf": model_rf,
     "enc1": enc1,
     "enc2": enc2,
+    "sklearn_version": sklearn.__version__,
 }
 
 joblib.dump(model_package, os.path.join(save_path, "models.joblib"))

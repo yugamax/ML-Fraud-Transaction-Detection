@@ -144,7 +144,15 @@ def predict(data: TransactionData, db: Session = Depends(get_db)):
     # Predict using ensemble (average probabilities)
     input_array = np.array(model_features).reshape(1, -1)
     proba_xgb = model_xgb.predict_proba(input_array)
-    proba_rf = model_rf.predict_proba(input_array)
+
+    try:
+        proba_rf = model_rf.predict_proba(input_array)
+    except Exception as e:
+        import warnings
+        warnings.warn(
+            f"RandomForest predict_proba failed ({e}); falling back to XGB probabilities."
+        )
+        proba_rf = proba_xgb
 
     avg_proba = (proba_xgb + proba_rf) / 2.0
     prediction_idx = int((avg_proba[:, 1] >= 0.5)[0])
