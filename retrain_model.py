@@ -82,8 +82,27 @@ df[cat_col_2] = enc2.fit_transform(df[cat_col_2])
 
 
 
-X = df[feature_columns]
+
+# Build feature matrix and target, then ensure no NaNs remain in X
+X = df[feature_columns].copy()
 y = df["flag"].astype(int)
+
+# Ensure numeric columns are numeric and impute remaining NaNs with median (or 0 if column all NaN)
+num_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+for col in num_cols:
+    if X[col].isna().all():
+        X[col] = X[col].fillna(0)
+    else:
+        X[col] = X[col].fillna(X[col].median())
+
+# For any non-numeric columns, fill missing with a sentinel then convert if necessary
+obj_cols = [c for c in X.columns if c not in num_cols]
+for col in obj_cols:
+    X[col] = X[col].fillna("missing")
+
+# Final safety: if any NaNs remain (unexpected), replace with 0
+if X.isna().sum().sum() > 0:
+    X = X.fillna(0)
 
 if y.nunique() < 2:
     raise ValueError("❌ Only one class present. Cannot train classifier.")
